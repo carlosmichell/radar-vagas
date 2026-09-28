@@ -1,0 +1,17 @@
+{
+  "name": "radar-vagas",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Automação que busca vagas de front-end júnior e avisa no Telegram",
+  "scripts": {
+    "start": "tsx --env-file-if-exists=.env src/main.ts",
+    "chatid": "tsx --env-file-if-exists=.env src/chatid.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.0"
+  }
+}
