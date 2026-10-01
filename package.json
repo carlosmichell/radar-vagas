@@ -2,16 +2,15 @@
   "name": "radar-vagas",
   "version": "0.1.0",
   "private": true,
-  "type": "module",
-  "description": "Automação que busca vagas de front-end júnior e avisa no Telegram",
+  "description": "A job radar that finds junior front-end opportunities and sends Telegram alerts",
+  "workspaces": [
+    "apps/*"
+  ],
   "scripts": {
-    "start": "tsx --env-file-if-exists=.env src/main.ts",
-    "chatid": "tsx --env-file-if-exists=.env src/chatid.ts",
-    "typecheck": "tsc --noEmit"
-  },
-  "devDependencies": {
-    "@types/node": "^24.0.0",
-    "tsx": "^4.19.0",
-    "typescript": "^5.5.0"
+    "start": "npm run bot:start",
+    "chatid": "npm run bot:chatid",
+    "bot:start": "npm run start --workspace=@radar-vagas/bot",
+    "bot:chatid": "npm run chatid --workspace=@radar-vagas/bot",
+    "typecheck": "npm run typecheck --workspaces --if-present"
   }
 }
