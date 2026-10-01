@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const file = path.join('data', 'seen.json');
+const file = fileURLToPath(new URL('../data/seen.json', import.meta.url));
 
 export async function loadSeenIds(): Promise<Set<string>> {
   try {
