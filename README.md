@@ -2,16 +2,15 @@
 
 A Node.js and TypeScript automation that finds junior front-end jobs on Gupy, filters them by role and seniority, and sends new opportunities to Telegram.
 
-The repository is organized as an npm workspace so the bot and the upcoming web dashboard can evolve independently while remaining part of the same product.
+The repository is organized as an npm workspace so the bot and web dashboard can evolve independently while remaining part of the same product.
 
 ## Repository structure
 
 ```text
 apps/
   bot/        Scheduled job collector and Telegram notifier
+  web/        React dashboard
 ```
-
-The React dashboard will be added later under `apps/web`.
 
 ## How it works
 
@@ -19,7 +18,7 @@ Gupy does not expose a public job-search API, so the bot reads the job data embe
 
 ## Requirements
 
-- Node.js 22 or newer
+- Node.js 22.12 or newer
 - npm 10 or newer
 
 ## Running locally
@@ -38,6 +37,12 @@ npm start
 
 Without `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`, the bot runs in dry-run mode and prints the jobs to the terminal.
 
+Run the web dashboard:
+
+```bash
+npm run web:dev
+```
+
 ## Telegram setup
 
 1. Open a conversation with **@BotFather**, create a bot, and copy its token.
@@ -50,6 +55,9 @@ Without `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`, the bot runs in dry-run mod
 ```bash
 npm start          # Run the bot
 npm run chatid     # Retrieve the Telegram chat ID
+npm run web:dev    # Start the web development server
+npm run web:build  # Create the production web build
+npm run lint       # Lint every workspace
 npm run typecheck  # Type-check every workspace
 ```
 
@@ -63,6 +71,9 @@ Add `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` under **Settings > Secrets and v
 
 - Node.js
 - TypeScript
+- React
+- Vite
+- Tailwind CSS
 - Native Fetch API
 - Telegram Bot API
 - GitHub Actions
