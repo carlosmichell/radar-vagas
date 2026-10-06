@@ -48,13 +48,39 @@ function mapJob(raw: GupyJob): Job {
     title: raw.name.trim(),
     company: raw.careerPageName,
     location: formatLocation(raw),
+    workplaceType: formatWorkplaceType(raw.workplaceType),
+    technology: detectTechnology(raw.name),
     url: raw.jobUrl,
     source: 'gupy',
     publishedAt: raw.publishedDate,
   };
 }
 
+function detectTechnology(title: string): string | undefined {
+  const technologies = [
+    ['React', /\breact(?:\.js)?\b/i],
+    ['Next.js', /\bnext(?:\.js)?\b/i],
+    ['TypeScript', /\btypescript\b/i],
+    ['JavaScript', /\bjavascript\b/i],
+    ['Vue.js', /\bvue(?:\.js)?\b/i],
+    ['Angular', /\bangular\b/i],
+    ['Node.js', /\bnode(?:\.js)?\b/i],
+    ['Python', /\bpython\b/i],
+    ['Java', /\bjava\b/i],
+    ['C#', /\bc#\b/i],
+  ] as const;
+
+  return technologies.find(([, pattern]) => pattern.test(title))?.[0];
+}
+
 function formatLocation(raw: GupyJob): string {
   if (raw.workplaceType === 'remote') return 'Remoto';
   return [raw.city, raw.state].filter(Boolean).join(' - ') || 'Não informado';
+}
+
+function formatWorkplaceType(value: string): string {
+  if (value === 'remote') return 'remote';
+  if (value === 'hybrid') return 'hybrid';
+  if (value === 'on-site' || value === 'onsite') return 'on_site';
+  return 'not_informed';
 }

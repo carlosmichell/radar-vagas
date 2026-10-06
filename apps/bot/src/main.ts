@@ -1,4 +1,5 @@
 import { QUERIES } from './config.js';
+import { syncJobsWithApi } from './api.js';
 import { filterJobs } from './filter.js';
 import { sendJobs } from './notify.js';
 import { createGupySource } from './sources/gupy.js';
@@ -22,6 +23,12 @@ async function main() {
 
   const filtered = filterJobs(allJobs);
   console.log(`→ ${filtered.length} após filtro`);
+
+  try {
+    await syncJobsWithApi(filtered);
+  } catch (error) {
+    console.error('Falha ao sincronizar com a API:', error);
+  }
 
   const seen = await loadSeenIds();
   const newJobs = filtered.filter((job) => !seen.has(job.id));

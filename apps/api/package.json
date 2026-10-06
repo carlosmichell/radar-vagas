@@ -1,0 +1,32 @@
+{
+  "name": "@radar-vagas/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "HTTP API for the Job Radar dashboard",
+  "scripts": {
+    "dev": "tsx watch --env-file-if-exists=../../.env src/server.ts",
+    "start": "tsx --env-file-if-exists=../../.env src/server.ts",
+    "lint": "oxlint src",
+    "test": "tsx --test src/app.test.ts",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate --config=drizzle.config.ts",
+    "db:migrate": "drizzle-kit migrate --config=drizzle.config.ts"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.3.0",
+    "@supabase/supabase-js": "^2.117.2",
+    "drizzle-orm": "^0.45.3",
+    "fastify": "^5.12.5",
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/pg": "^8.23.1",
+    "dotenv": "^18.0.5",
+    "drizzle-kit": "^0.31.11",
+    "oxlint": "^1.81.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.0"
+  }
+}

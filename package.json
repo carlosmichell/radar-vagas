@@ -9,12 +9,15 @@
   "scripts": {
     "start": "npm run bot:start",
     "chatid": "npm run bot:chatid",
+    "api:dev": "npm run dev --workspace=@radar-vagas/api",
+    "api:start": "npm run start --workspace=@radar-vagas/api",
     "bot:start": "npm run start --workspace=@radar-vagas/bot",
     "bot:chatid": "npm run chatid --workspace=@radar-vagas/bot",
     "web:dev": "npm run dev --workspace=@radar-vagas/web",
     "web:build": "npm run build --workspace=@radar-vagas/web",
     "web:preview": "npm run preview --workspace=@radar-vagas/web",
     "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present"
   }
 }
