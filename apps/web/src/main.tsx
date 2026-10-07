@@ -1,4 +1,4 @@
-import { StrictMode, useEffect, useState, type ReactNode } from 'react'
+import { StrictMode, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router'
 import '@fontsource-variable/sora'
@@ -21,22 +21,14 @@ if (!globalThis.crypto.randomUUID) {
   })
 }
 
-const [{ default: App }, { default: LoginPage }, { authClient }] = await Promise.all([
+const [{ default: App }, { default: LoginPage }, { SessionProvider, useSession }] = await Promise.all([
   import('./App.tsx'),
   import('./LoginPage.tsx'),
-  import('./auth.ts'),
+  import('./SessionProvider.tsx'),
 ])
 
 function RequireAuthentication({ children }: { children: ReactNode }) {
-  const [isCheckingSession, setIsCheckingSession] = useState(true)
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
-
-  useEffect(() => {
-    void authClient.auth.getSession()
-      .then(({ data }) => setIsAuthenticated(Boolean(data.session?.user)))
-      .catch(() => setIsAuthenticated(false))
-      .finally(() => setIsCheckingSession(false))
-  }, [])
+  const { isCheckingSession, isAuthenticated } = useSession()
 
   if (isCheckingSession) {
     return <main className="min-h-screen bg-[#0e0e0d] p-6 text-sm text-[#6f6a62]">Verificando acesso...</main>
@@ -47,12 +39,14 @@ function RequireAuthentication({ children }: { children: ReactNode }) {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <BrowserRouter>
-      <Routes>
-        <Route element={<RequireAuthentication><App /></RequireAuthentication>} path="/" />
-        <Route element={<LoginPage />} path="/login" />
-        <Route element={<Navigate replace to="/" />} path="*" />
-      </Routes>
-    </BrowserRouter>
+    <SessionProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route element={<RequireAuthentication><App /></RequireAuthentication>} path="/" />
+          <Route element={<LoginPage />} path="/login" />
+          <Route element={<Navigate replace to="/" />} path="*" />
+        </Routes>
+      </BrowserRouter>
+    </SessionProvider>
   </StrictMode>,
 )

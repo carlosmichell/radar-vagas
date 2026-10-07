@@ -4,7 +4,8 @@
   "private": true,
   "description": "A job radar that finds junior front-end opportunities and sends Telegram alerts",
   "workspaces": [
-    "apps/*"
+    "apps/*",
+    "packages/*"
   ],
   "scripts": {
     "start": "npm run bot:start",

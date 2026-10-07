@@ -1,25 +1,24 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router'
+import { jobStatusValues, type JobDto, type JobStatus, type JobsSummary } from '@radar-vagas/contracts'
+import { getAccount, getJobs, getSummary, updateJobStatus } from './apiClient'
 import { authClient } from './auth'
 
-type JobStatus = 'new' | 'saved' | 'applied' | 'discarded'
-
-type Summary = { total: number; new: number; saved: number; applied: number; discarded: number }
-type Job = {
-  id: string
-  title: string
-  company: string
-  location: string
-  workplaceType: string
-  technology: string | null
-  url: string
-  source: string
-  publishedAt: string | null
-  status: JobStatus
+const statusLabels: Record<JobStatus, string> = {
+  new: 'Nova',
+  saved: 'Salva',
+  applied: 'Candidatado',
+  discarded: 'Descartada',
 }
 
-const apiBaseUrl = import.meta.env.VITE_API_URL ?? '/api'
-function apiUrl(path: string) { return `${apiBaseUrl.replace(/\/$/, '')}${path}` }
+function summaryCards(summary: JobsSummary) {
+  return [
+    { label: 'vagas novas', value: summary.new },
+    { label: 'salvas', value: summary.saved },
+    { label: 'candidaturas', value: summary.applied },
+    { label: 'das vagas viraram candidaturas', value: `${summary.total ? Math.round((summary.applied / summary.total) * 100) : 0}%` },
+  ]
+}
 
 function formatPublishedAge(publishedAt: string | null) {
   if (!publishedAt) return 'Data não informada'
@@ -33,8 +32,8 @@ function formatPublishedAge(publishedAt: string | null) {
 
 function App() {
   const navigate = useNavigate()
-  const [summary, setSummary] = useState<Summary>({ total: 0, new: 0, saved: 0, applied: 0, discarded: 0 })
-  const [jobs, setJobs] = useState<Job[]>([])
+  const [summary, setSummary] = useState<JobsSummary>({ total: 0, new: 0, saved: 0, applied: 0, discarded: 0 })
+  const [jobs, setJobs] = useState<JobDto[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
@@ -46,38 +45,31 @@ function App() {
   const [updatingJobId, setUpdatingJobId] = useState<string | null>(null)
 
   async function loadSummary() {
-    const response = await fetch(apiUrl('/jobs/summary'), { headers: await getAuthHeaders() })
-    if (!response.ok) throw new Error('Could not load summary.')
-    setSummary(await response.json())
+    setSummary(await getSummary())
   }
 
   useEffect(() => {
     void loadSummary().catch(() => undefined)
-    void (async () => {
-      const response = await fetch(apiUrl('/auth/me'), { headers: await getAuthHeaders() })
-        if (!response.ok) throw new Error(`A API recusou a sessão (HTTP ${response.status}).`)
-        const account = (await response.json()) as { userId: string; role: string }
+    void getAccount()
+      .then((account) => {
         setAuthUserId(account.userId)
-        setAccountRole(account.role === 'admin' ? 'admin' : 'viewer')
-    })().catch((cause: unknown) => {
-      setAccountRole('error')
-      setAccountError(cause instanceof Error ? cause.message : 'Não foi possível obter um token de acesso.')
-    })
+        setAccountRole(account.role)
+      })
+      .catch((cause: unknown) => {
+        setAccountRole('error')
+        setAccountError(cause instanceof Error ? cause.message : 'Não foi possível obter um token de acesso.')
+      })
   }, [])
 
   useEffect(() => {
-    const parameters = new URLSearchParams()
-    if (query) parameters.set('query', query)
-    if (workplaceType) parameters.set('workplaceType', workplaceType)
-    if (maxAgeDays) parameters.set('maxAgeDays', maxAgeDays)
-
     async function loadJobs() {
       setError(null)
       try {
-        const suffix = parameters.size ? `?${parameters}` : ''
-        const response = await fetch(apiUrl(`/jobs${suffix}`), { headers: await getAuthHeaders() })
-        if (!response.ok) throw new Error('Could not load jobs.')
-        const data = await response.json()
+        const data = await getJobs({
+          query,
+          workplaceType,
+          maxAgeDays: maxAgeDays ? Number(maxAgeDays) : undefined,
+        })
         setJobs(data.items)
       } catch {
         setError('Não foi possível carregar as vagas.')
@@ -93,14 +85,7 @@ function App() {
     setUpdatingJobId(id)
     setError(null)
     try {
-      const authHeaders = await getAuthHeaders()
-      const response = await fetch(apiUrl(`/jobs/${id}/status`), {
-        method: 'PATCH',
-        headers: { ...authHeaders, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
-      })
-      if (!response.ok) throw new Error('Could not update status.')
-      const updatedJob = (await response.json()) as Job
+      const updatedJob = await updateJobStatus(id, status)
       setJobs((currentJobs) => currentJobs.map((job) => (job.id === id ? updatedJob : job)))
       await loadSummary()
     } catch {
@@ -139,12 +124,14 @@ function App() {
       </header>
       <main>
         <section className="mt-4 flex flex-col gap-1 text-[#6f6a62]"><h2>Últimas vagas encontradas</h2><p>Resultados coletados diariamente na Gupy.</p></section>
-        <section className="mt-6 grid grid-cols-2 gap-4">
-          <div className="rounded-md border border-[#2a2926] bg-neutral-900/80 p-4"><dd className="text-xl">{summary.new}</dd><dt className="text-sm text-[#6f6a62]">vagas novas</dt></div>
-          <div className="rounded-md border border-[#2a2926] bg-neutral-900/80 p-4"><dd className="text-xl">{summary.saved}</dd><dt className="text-sm text-[#6f6a62]">salvas</dt></div>
-          <div className="rounded-md border border-[#2a2926] bg-neutral-900/80 p-4"><dd className="text-xl">{summary.applied}</dd><dt className="text-sm text-[#6f6a62]">candidaturas</dt></div>
-          <div className="rounded-md border border-[#2a2926] bg-neutral-900/80 p-4"><dd className="text-xl">{summary.total ? Math.round((summary.applied / summary.total) * 100) : 0}%</dd><dt className="text-sm text-[#6f6a62]">das vagas viraram candidaturas</dt></div>
-        </section>
+        <dl className="mt-6 grid grid-cols-2 gap-4">
+          {summaryCards(summary).map(({ label, value }) => (
+            <div className="flex flex-col rounded-md border border-[#2a2926] bg-neutral-900/80 p-4" key={label}>
+              <dt className="order-2 text-sm text-[#6f6a62]">{label}</dt>
+              <dd className="order-1 text-xl">{value}</dd>
+            </div>
+          ))}
+        </dl>
         <section className="mt-6 rounded-md border border-[#2a2926] bg-neutral-900/80 px-4 py-4">
           <h2 className="px-1">Vagas</h2>
           <div className="grid grid-cols-2 gap-2">
@@ -155,23 +142,23 @@ function App() {
           {isLoading && <p className="mt-6 text-xs text-[#6f6a62]">Carregando vagas...</p>}
           {error && <p className="mt-6 text-xs text-red-400">{error}</p>}
           {!isLoading && !error && jobs.length === 0 && <p className="mt-6 text-xs text-[#6f6a62]">Nenhuma vaga encontrada.</p>}
-          {jobs.map((job) => <article className="flex justify-between border-b border-[#2a2926] py-3" key={job.id}><div className="flex flex-col gap-1"><h3 className="text-sm">{job.title}</h3><p className="text-xs text-[#6f6a62]">{job.company} • {job.workplaceType} • {formatPublishedAge(job.publishedAt)}</p></div>{accountRole === 'admin' ? <select className="ml-2 h-8 rounded-md border border-[#2a2926] bg-neutral-900/80 p-2 text-xs text-slate-100 outline-none" disabled={updatingJobId === job.id} onChange={(event) => void updateStatus(job.id, event.target.value as JobStatus)} value={job.status}><option value="new">Nova</option><option value="saved">Salva</option><option value="applied">Candidatado</option><option value="discarded">Descartada</option></select> : <span className="ml-2 self-center text-xs text-[#6f6a62]">{job.status}</span>}</article>)}
+          {jobs.map((job) => (
+            <article className="flex justify-between border-b border-[#2a2926] py-3" key={job.id}>
+              <div className="flex flex-col gap-1">
+                <h3 className="text-sm">{job.title}</h3>
+                <p className="text-xs text-[#6f6a62]">{job.company} • {job.workplaceType} • {formatPublishedAge(job.publishedAt)}</p>
+              </div>
+              {accountRole === 'admin' ? (
+                <select className="ml-2 h-8 rounded-md border border-[#2a2926] bg-neutral-900/80 p-2 text-xs text-slate-100 outline-none" disabled={updatingJobId === job.id} onChange={(event) => void updateStatus(job.id, event.target.value as JobStatus)} value={job.status}>
+                  {jobStatusValues.map((status) => <option key={status} value={status}>{statusLabels[status]}</option>)}
+                </select>
+              ) : <span className="ml-2 self-center text-xs text-[#6f6a62]">{statusLabels[job.status]}</span>}
+            </article>
+          ))}
         </section>
       </main>
     </div>
   )
-}
-
-async function getAuthHeaders(): Promise<HeadersInit> {
-  const { data, error } = await authClient.auth.getSession()
-  if (error) {
-    throw new Error(`Supabase Auth não conseguiu recuperar a sessão: ${error.message}`)
-  }
-  const token = data.session?.access_token
-  if (!token) {
-    throw new Error('A sessão expirou. Entre novamente para continuar.')
-  }
-  return { Authorization: `Bearer ${token}` }
 }
 
 export default App

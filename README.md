@@ -2,7 +2,7 @@
 
 A Node.js and TypeScript automation that finds junior front-end jobs on Gupy, filters them by role and seniority, and sends new opportunities to Telegram.
 
-The repository is organized as an npm workspace so the bot and web dashboard can evolve independently while remaining part of the same product.
+The repository is organized as an npm workspace for the bot, API, dashboard, and their shared contracts.
 
 ## Repository structure
 
@@ -11,6 +11,8 @@ apps/
   api/        HTTP API for the dashboard
   bot/        Scheduled job collector and Telegram notifier
   web/        React dashboard
+packages/
+  contracts/  Types and status values shared by the apps
 ```
 
 ## How it works

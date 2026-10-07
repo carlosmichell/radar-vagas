@@ -1,14 +1,6 @@
-export interface Job {
-  id: string;
-  title: string;
-  company: string;
-  location: string;
-  workplaceType?: string;
-  technology?: string;
-  url: string;
-  source: string;
-  publishedAt?: string;
-}
+import type { IncomingJob } from '@radar-vagas/contracts';
+
+export type Job = IncomingJob;
 
 export interface JobSource {
   name: string;

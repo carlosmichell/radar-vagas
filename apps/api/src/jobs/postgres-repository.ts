@@ -4,6 +4,21 @@ import { Pool } from 'pg';
 import { jobs } from '../db/schema.js';
 import type { JobsRepository, JobsSummary } from './types.js';
 
+const storedJobSelection = {
+  id: jobs.id,
+  title: jobs.title,
+  company: jobs.company,
+  location: jobs.location,
+  workplaceType: jobs.workplaceType,
+  technology: jobs.technology,
+  url: jobs.url,
+  source: jobs.source,
+  publishedAt: jobs.publishedAt,
+  discoveredAt: jobs.discoveredAt,
+  lastSeenAt: jobs.lastSeenAt,
+  status: jobs.status,
+};
+
 export function createPostgresJobsRepository(databaseUrl: string): JobsRepository {
   const pool = new Pool({ connectionString: databaseUrl });
   const db = drizzle({ client: pool });
@@ -36,20 +51,7 @@ export function createPostgresJobsRepository(databaseUrl: string): JobsRepositor
       }
 
       const rows = await db
-        .select({
-          id: jobs.id,
-          title: jobs.title,
-          company: jobs.company,
-          location: jobs.location,
-          workplaceType: jobs.workplaceType,
-          technology: jobs.technology,
-          url: jobs.url,
-          source: jobs.source,
-          publishedAt: jobs.publishedAt,
-          discoveredAt: jobs.discoveredAt,
-          lastSeenAt: jobs.lastSeenAt,
-          status: jobs.status,
-        })
+        .select(storedJobSelection)
         .from(jobs)
         .where(conditions.length ? and(...conditions) : undefined)
         .orderBy(desc(jobs.publishedAt), desc(jobs.discoveredAt))
@@ -118,20 +120,7 @@ export function createPostgresJobsRepository(databaseUrl: string): JobsRepositor
         .update(jobs)
         .set({ status, updatedAt: now })
         .where(eq(jobs.id, id))
-        .returning({
-          id: jobs.id,
-          title: jobs.title,
-          company: jobs.company,
-          location: jobs.location,
-          workplaceType: jobs.workplaceType,
-          technology: jobs.technology,
-          url: jobs.url,
-          source: jobs.source,
-          publishedAt: jobs.publishedAt,
-          discoveredAt: jobs.discoveredAt,
-          lastSeenAt: jobs.lastSeenAt,
-          status: jobs.status,
-        });
+        .returning(storedJobSelection);
 
       return job;
     },

@@ -1,7 +1,5 @@
 import { index, pgEnum, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
-
-export const jobStatusValues = ['new', 'saved', 'applied', 'discarded'] as const;
-export type JobStatus = (typeof jobStatusValues)[number];
+import { jobStatusValues } from '@radar-vagas/contracts';
 
 export const jobStatus = pgEnum('job_status', jobStatusValues);
 export const userRole = pgEnum('radar_user_role', ['viewer', 'admin']);

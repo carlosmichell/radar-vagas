@@ -1,8 +1,9 @@
 import type { FastifyInstance } from 'fastify';
-import { AuthProviderUnavailableError, type AuthVerifier } from '../auth.js';
-import { jobStatusValues } from '../db/schema.js';
-import type { IncomingJob, JobListFilters, JobsRepository } from './types.js';
+import { jobStatusValues, type IncomingJob, type JobListFilters, type JobStatus } from '@radar-vagas/contracts';
+import type { AuthVerifier } from '../auth.js';
+import type { JobsRepository } from './types.js';
 import type { RolesRepository } from '../roles.js';
+import { createJobGuards } from './guards.js';
 
 interface JobRoutesOptions {
   repository: JobsRepository;
@@ -20,6 +21,7 @@ const jobSchema = {
     'company',
     'location',
     'workplaceType',
+    'technology',
     'url',
     'source',
     'publishedAt',
@@ -44,19 +46,17 @@ const jobSchema = {
 } as const;
 
 export async function registerJobRoutes(app: FastifyInstance, options: JobRoutesOptions) {
-  app.get('/auth/me', async (request, reply) => {
-    if (!options.rolesRepository) {
-      return reply.code(503).send({ message: 'Dashboard roles are not configured.' });
-    }
-    const userId = await authenticate(request.headers.authorization, reply, options.authVerifier);
-    if (!userId) return;
+  const guards = createJobGuards(app, options);
 
-    return { userId, role: await options.rolesRepository.getRole(userId) };
+  app.get('/auth/me', { preHandler: [guards.requireAuthenticated, guards.requireRolesConfigured] }, async (request) => {
+    const userId = request.dashboardUserId!;
+    return { userId, role: await options.rolesRepository!.getRole(userId) };
   });
 
   app.get(
     '/jobs',
     {
+      preHandler: guards.requireAuthenticated,
       schema: {
         querystring: {
           type: 'object',
@@ -82,9 +82,7 @@ export async function registerJobRoutes(app: FastifyInstance, options: JobRoutes
         },
       },
     },
-    async (request, reply) => {
-      const userId = await authenticate(request.headers.authorization, reply, options.authVerifier);
-      if (!userId) return;
+    async (request) => {
       const filters = request.query as JobListFilters;
       const items = await options.repository.list(filters);
       return { items };
@@ -94,6 +92,7 @@ export async function registerJobRoutes(app: FastifyInstance, options: JobRoutes
   app.patch(
     '/jobs/:id/status',
     {
+      preHandler: [guards.requireAuthenticated, guards.requireAdmin],
       schema: {
         params: {
           type: 'object',
@@ -110,27 +109,8 @@ export async function registerJobRoutes(app: FastifyInstance, options: JobRoutes
       },
     },
     async (request, reply) => {
-      if (!options.authVerifier || !options.rolesRepository) {
-        return reply.code(503).send({
-          statusCode: 503,
-          error: 'Service Unavailable',
-          message: 'Dashboard roles are not configured.',
-        });
-      }
-
-      const userId = await authenticate(request.headers.authorization, reply, options.authVerifier);
-      if (!userId) return;
-
-      if (await options.rolesRepository.getRole(userId) !== 'admin') {
-        return reply.code(403).send({
-          statusCode: 403,
-          error: 'Forbidden',
-          message: 'Only the dashboard administrator can update job statuses.',
-        });
-      }
-
       const { id } = request.params as { id: string };
-      const { status } = request.body as { status: (typeof jobStatusValues)[number] };
+      const { status } = request.body as { status: JobStatus };
       const job = await options.repository.updateStatus(id, status);
 
       if (!job) {
@@ -148,6 +128,7 @@ export async function registerJobRoutes(app: FastifyInstance, options: JobRoutes
   app.get(
     '/jobs/summary',
     {
+      preHandler: guards.requireAuthenticated,
       schema: {
         response: {
           200: {
@@ -165,16 +146,13 @@ export async function registerJobRoutes(app: FastifyInstance, options: JobRoutes
         },
       },
     },
-    async (request, reply) => {
-      const userId = await authenticate(request.headers.authorization, reply, options.authVerifier);
-      if (!userId) return;
-      return options.repository.summary();
-    },
+    async () => options.repository.summary(),
   );
 
   app.post(
     '/internal/jobs',
     {
+      preHandler: guards.requireIngestionToken,
       schema: {
         body: {
           type: 'object',
@@ -205,64 +183,10 @@ export async function registerJobRoutes(app: FastifyInstance, options: JobRoutes
         },
       },
     },
-    async (request, reply) => {
-      if (!options.ingestionToken) {
-        return reply.code(503).send({
-          statusCode: 503,
-          error: 'Service Unavailable',
-          message: 'The ingestion endpoint is not configured.',
-        });
-      }
-
-      if (request.headers.authorization !== `Bearer ${options.ingestionToken}`) {
-        return reply.code(401).send({
-          statusCode: 401,
-          error: 'Unauthorized',
-          message: 'Invalid ingestion token.',
-        });
-      }
-
+    async (request) => {
       const { jobs } = request.body as { jobs: IncomingJob[] };
       const processed = await options.repository.upsert(jobs);
       return { processed };
     },
   );
-}
-
-async function authenticate(
-  authorization: string | undefined,
-  reply: import('fastify').FastifyReply,
-  verifier: AuthVerifier | undefined,
-): Promise<string | undefined> {
-  if (!verifier) {
-    reply.code(503).send({
-      statusCode: 503,
-      error: 'Service Unavailable',
-      message: 'Dashboard authentication is not configured.',
-    });
-    return undefined;
-  }
-
-  let userId: string | null;
-  try {
-    userId = await verifier.verify(authorization);
-  } catch (error) {
-    if (!(error instanceof AuthProviderUnavailableError)) throw error;
-    reply.code(503).send({
-      statusCode: 503,
-      error: 'Service Unavailable',
-      message: 'Supabase Auth is temporarily unavailable.',
-    });
-    return undefined;
-  }
-  if (!userId) {
-    reply.code(401).send({
-      statusCode: 401,
-      error: 'Unauthorized',
-      message: 'Sign in to access the dashboard.',
-    });
-    return undefined;
-  }
-
-  return userId;
 }
