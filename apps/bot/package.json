@@ -7,6 +7,7 @@
   "scripts": {
     "start": "tsx --env-file-if-exists=../../.env src/main.ts",
     "chatid": "tsx --env-file-if-exists=../../.env src/chatid.ts",
+    "test": "tsx --test src/notify.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

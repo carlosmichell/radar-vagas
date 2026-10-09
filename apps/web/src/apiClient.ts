@@ -1,17 +1,24 @@
-import type { JobDto, JobListFilters, JobStatus, JobsSummary } from '@radar-vagas/contracts'
+import type { JobDto, JobListFilters, JobStatus, VisibleJobDto, VisibleJobsSummary } from '@radar-vagas/contracts'
 import { authClient } from './auth'
 
-const apiBaseUrl = (import.meta.env.VITE_API_URL ?? '/api').replace(/\/$/, '')
+const apiBaseUrl = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '')
 
 async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
   const { data, error } = await authClient.auth.getSession()
   if (error) throw new Error(`Supabase Auth não conseguiu recuperar a sessão: ${error.message}`)
   const token = data.session?.access_token
-  if (!token) throw new Error('A sessão expirou. Entre novamente para continuar.')
+  if (!token) {
+    await authClient.auth.signOut({ scope: 'local' })
+    throw new Error('A sessão expirou. Entre novamente para continuar.')
+  }
 
   const headers = new Headers(options.headers)
   headers.set('Authorization', `Bearer ${token}`)
   const response = await fetch(`${apiBaseUrl}${path}`, { ...options, headers })
+  if (response.status === 401) {
+    await authClient.auth.signOut({ scope: 'local' })
+    throw new Error('A sessão expirou. Entre novamente para continuar.')
+  }
   if (!response.ok) throw new Error(`A API recusou a requisição (HTTP ${response.status}).`)
   return response.json() as Promise<T>
 }
@@ -21,7 +28,7 @@ export function getAccount() {
 }
 
 export function getSummary() {
-  return apiRequest<JobsSummary>('/jobs/summary')
+  return apiRequest<VisibleJobsSummary>('/jobs/summary')
 }
 
 export function getJobs(filters: Pick<JobListFilters, 'query' | 'workplaceType' | 'maxAgeDays'>) {
@@ -30,7 +37,7 @@ export function getJobs(filters: Pick<JobListFilters, 'query' | 'workplaceType' 
   if (filters.workplaceType) parameters.set('workplaceType', filters.workplaceType)
   if (filters.maxAgeDays !== undefined) parameters.set('maxAgeDays', String(filters.maxAgeDays))
   const suffix = parameters.size ? `?${parameters}` : ''
-  return apiRequest<{ items: JobDto[] }>(`/jobs${suffix}`)
+  return apiRequest<{ items: VisibleJobDto[] }>(`/jobs${suffix}`)
 }
 
 export function updateJobStatus(id: string, status: JobStatus) {

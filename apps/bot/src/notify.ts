@@ -24,7 +24,7 @@ async function sendMessage(token: string, chatId: string, jobs: Job[]) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       chat_id: chatId,
-      text: format(jobs),
+      text: formatJobsMessage(jobs),
       parse_mode: 'HTML',
       disable_web_page_preview: true,
     }),
@@ -32,22 +32,33 @@ async function sendMessage(token: string, chatId: string, jobs: Job[]) {
   if (!response.ok) throw new Error(`Telegram ${response.status}: ${await response.text()}`);
 }
 
-function format(jobs: Job[]): string {
+export function formatJobsMessage(jobs: Job[]): string {
   return (
     '<b>Radar de Vagas</b>\n\n' +
     jobs
       .map(
-        (job) =>
-          `<b>${escape(job.title)}</b>\n` +
-          `${escape(job.company)} · ${escape(job.location)}\n` +
-          `<a href="${job.url}">Ver vaga</a>`,
+        (job) => {
+          const safeUrl = safeJobUrl(job.url);
+          return `<b>${escape(job.title)}</b>\n` +
+            `${escape(job.company)} · ${escape(job.location)}\n` +
+            (safeUrl ? `<a href="${escape(safeUrl)}">Ver vaga</a>` : 'Link indisponível');
+        },
       )
       .join('\n\n')
   );
 }
 
 function escape(text: string): string {
-  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function safeJobUrl(value: string): string | null {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' || url.protocol === 'http:' ? url.href : null;
+  } catch {
+    return null;
+  }
 }
 
 function print(job: Job): void {

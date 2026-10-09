@@ -15,6 +15,14 @@ interface AppDependencies {
 export function buildApp(options: FastifyServerOptions = {}, dependencies: AppDependencies = {}) {
   const app = Fastify(options);
 
+  app.addHook('onSend', async (_request, reply, payload) => {
+    reply.header('Cache-Control', 'no-store');
+    reply.header('X-Content-Type-Options', 'nosniff');
+    reply.header('Referrer-Policy', 'no-referrer');
+    reply.header('X-Frame-Options', 'DENY');
+    return payload;
+  });
+
   app.register(cors, {
     origin: process.env.WEB_ORIGIN ?? 'http://localhost:5173',
   });

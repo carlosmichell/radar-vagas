@@ -14,14 +14,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       if (active) setState({ isCheckingSession: false, isAuthenticated: Boolean(session?.user) })
     })
 
-    void authClient.auth.getSession()
-      .then(({ data, error }) => {
-        if (active) setState({ isCheckingSession: false, isAuthenticated: !error && Boolean(data.session?.user) })
-      })
-      .catch(() => {
-        if (active) setState({ isCheckingSession: false, isAuthenticated: false })
-      })
-
     return () => {
       active = false
       subscription.unsubscribe()

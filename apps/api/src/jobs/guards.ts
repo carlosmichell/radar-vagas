@@ -1,10 +1,11 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { AuthProviderUnavailableError, type AuthVerifier } from '../auth.js';
-import type { RolesRepository } from '../roles.js';
+import type { AppRole, RolesRepository } from '../roles.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
     dashboardUserId: string | null;
+    dashboardRole: AppRole | null;
   }
 }
 
@@ -20,6 +21,7 @@ function sendError(reply: FastifyReply, statusCode: number, error: string, messa
 
 export function createJobGuards(app: FastifyInstance, options: GuardOptions) {
   app.decorateRequest('dashboardUserId', null);
+  app.decorateRequest('dashboardRole', null);
 
   async function requireAuthenticated(request: FastifyRequest, reply: FastifyReply) {
     if (!options.authVerifier) {
@@ -40,17 +42,18 @@ export function createJobGuards(app: FastifyInstance, options: GuardOptions) {
     request.dashboardUserId = userId;
   }
 
-  async function requireRolesConfigured(_request: FastifyRequest, reply: FastifyReply) {
+  async function requireRole(request: FastifyRequest, reply: FastifyReply) {
     if (!options.rolesRepository) {
       return sendError(reply, 503, 'Service Unavailable', 'Dashboard roles are not configured.');
     }
+    if (!request.dashboardUserId) {
+      return sendError(reply, 401, 'Unauthorized', 'Sign in to access the dashboard.');
+    }
+    request.dashboardRole = await options.rolesRepository.getRole(request.dashboardUserId);
   }
 
   async function requireAdmin(request: FastifyRequest, reply: FastifyReply) {
-    if (!options.rolesRepository) {
-      return sendError(reply, 503, 'Service Unavailable', 'Dashboard roles are not configured.');
-    }
-    if (await options.rolesRepository.getRole(request.dashboardUserId!) !== 'admin') {
+    if (request.dashboardRole !== 'admin') {
       return sendError(reply, 403, 'Forbidden', 'Only the dashboard administrator can update job statuses.');
     }
   }
@@ -64,5 +67,5 @@ export function createJobGuards(app: FastifyInstance, options: GuardOptions) {
     }
   }
 
-  return { requireAuthenticated, requireRolesConfigured, requireAdmin, requireIngestionToken };
+  return { requireAuthenticated, requireRole, requireAdmin, requireIngestionToken };
 }

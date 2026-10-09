@@ -22,6 +22,9 @@ export interface JobDto extends Omit<IncomingJob, 'workplaceType' | 'technology'
   status: JobStatus;
 }
 
+export type PublicJobDto = Omit<JobDto, 'status'>;
+export type VisibleJobDto = JobDto | PublicJobDto;
+
 export interface StoredJob extends Omit<JobDto, 'publishedAt' | 'discoveredAt' | 'lastSeenAt'> {
   publishedAt: Date | null;
   discoveredAt: Date;
@@ -38,3 +41,5 @@ export interface JobListFilters {
 }
 
 export type JobsSummary = { total: number } & Record<JobStatus, number>;
+export type PublicJobsSummary = Pick<JobsSummary, 'total'>;
+export type VisibleJobsSummary = JobsSummary | PublicJobsSummary;

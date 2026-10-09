@@ -33,6 +33,8 @@ test('GET /health returns the API status', async (context) => {
 
   assert.equal(response.statusCode, 200);
   assert.deepEqual(response.json(), { status: 'ok' });
+  assert.equal(response.headers['x-content-type-options'], 'nosniff');
+  assert.equal(response.headers['cache-control'], 'no-store');
 });
 
 test('GET /auth/me reports an unavailable auth provider as 503', async (context) => {
@@ -44,6 +46,17 @@ test('GET /auth/me reports an unavailable auth provider as 503', async (context)
   context.after(() => app.close());
 
   const response = await app.inject({ method: 'GET', url: '/auth/me', headers: { authorization: 'Bearer test-token' } });
+  assert.equal(response.statusCode, 503);
+});
+
+test('job routes fail closed when roles are not configured', async (context) => {
+  const app = buildApp({}, {
+    repository: { list: async () => [], summary: async () => ({ total: 0, new: 0, saved: 0, applied: 0, discarded: 0 }), upsert: async () => 0, updateStatus: async () => undefined },
+    authVerifier: { verify: async () => 'some-user-id' },
+  });
+  context.after(() => app.close());
+
+  const response = await app.inject({ method: 'GET', url: '/jobs', headers: { authorization: 'Bearer valid-session' } });
   assert.equal(response.statusCode, 503);
 });
 
@@ -114,9 +127,46 @@ test('job routes list, summarize, and authenticate ingestion', async (context) =
   });
   assert.equal(jobsResponse.statusCode, 200);
   assert.equal(jobsResponse.json().items[0].id, exampleJob.id);
+  assert.equal(jobsResponse.json().items[0].status, 'new');
+
+  const viewerJobsResponse = await app.inject({
+    method: 'GET',
+    url: '/jobs',
+    headers: { authorization: 'Bearer viewer-session' },
+  });
+  assert.equal(viewerJobsResponse.statusCode, 200);
+  assert.equal('status' in viewerJobsResponse.json().items[0], false);
+
+  const viewerStatusFilterResponse = await app.inject({
+    method: 'GET',
+    url: '/jobs?status=applied',
+    headers: { authorization: 'Bearer viewer-session' },
+  });
+  assert.equal(viewerStatusFilterResponse.statusCode, 403);
+
+  const adminStatusFilterResponse = await app.inject({
+    method: 'GET',
+    url: '/jobs?status=applied',
+    headers: { authorization: 'Bearer admin-session' },
+  });
+  assert.equal(adminStatusFilterResponse.statusCode, 200);
 
   const anonymousJobsResponse = await app.inject({ method: 'GET', url: '/jobs' });
   assert.equal(anonymousJobsResponse.statusCode, 401);
+
+  const invalidSessionResponse = await app.inject({
+    method: 'GET',
+    url: '/auth/me',
+    headers: { authorization: 'Bearer invalid-session' },
+  });
+  assert.equal(invalidSessionResponse.statusCode, 401);
+
+  const ingestionTokenOnDashboardResponse = await app.inject({
+    method: 'GET',
+    url: '/jobs/summary',
+    headers: { authorization: 'Bearer test-token' },
+  });
+  assert.equal(ingestionTokenOnDashboardResponse.statusCode, 401);
 
   const filteredJobsResponse = await app.inject({
     method: 'GET',
@@ -139,12 +189,28 @@ test('job routes list, summarize, and authenticate ingestion', async (context) =
     discarded: 0,
   });
 
+  const viewerSummaryResponse = await app.inject({
+    method: 'GET',
+    url: '/jobs/summary',
+    headers: { authorization: 'Bearer viewer-session' },
+  });
+  assert.equal(viewerSummaryResponse.statusCode, 200);
+  assert.deepEqual(viewerSummaryResponse.json(), { total: 1 });
+
   const unauthorizedResponse = await app.inject({
     method: 'POST',
     url: '/internal/jobs',
     payload: { jobs: [] },
   });
   assert.equal(unauthorizedResponse.statusCode, 401);
+
+  const dashboardTokenOnIngestionResponse = await app.inject({
+    method: 'POST',
+    url: '/internal/jobs',
+    headers: { authorization: 'Bearer admin-session' },
+    payload: { jobs: [] },
+  });
+  assert.equal(dashboardTokenOnIngestionResponse.statusCode, 401);
 
   const ingestionResponse = await app.inject({
     method: 'POST',
@@ -169,6 +235,24 @@ test('job routes list, summarize, and authenticate ingestion', async (context) =
 
   assert.equal(ingestionResponse.statusCode, 200);
   assert.deepEqual(ingestionResponse.json(), { processed: 1 });
+  assert.equal(ingestedJobCount, 1);
+
+  const unsafeUrlResponse = await app.inject({
+    method: 'POST',
+    url: '/internal/jobs',
+    headers: { authorization: 'Bearer test-token' },
+    payload: {
+      jobs: [{
+        id: exampleJob.id,
+        title: exampleJob.title,
+        company: exampleJob.company,
+        location: exampleJob.location,
+        url: 'javascript:alert(1)',
+        source: exampleJob.source,
+      }],
+    },
+  });
+  assert.equal(unsafeUrlResponse.statusCode, 400);
   assert.equal(ingestedJobCount, 1);
 
   const statusResponse = await app.inject({
@@ -196,5 +280,13 @@ test('job routes list, summarize, and authenticate ingestion', async (context) =
     payload: { status: 'applied' },
   });
   assert.equal(forbiddenResponse.statusCode, 403);
+  assert.equal(updatedStatus, 'saved');
+
+  const unauthenticatedStatusResponse = await app.inject({
+    method: 'PATCH',
+    url: `/jobs/${exampleJob.id}/status`,
+    payload: { status: 'applied' },
+  });
+  assert.equal(unauthenticatedStatusResponse.statusCode, 401);
   assert.equal(updatedStatus, 'saved');
 });

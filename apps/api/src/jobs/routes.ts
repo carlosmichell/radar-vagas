@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { jobStatusValues, type IncomingJob, type JobListFilters, type JobStatus } from '@radar-vagas/contracts';
 import type { AuthVerifier } from '../auth.js';
-import type { JobsRepository } from './types.js';
+import type { JobsRepository, StoredJob } from './types.js';
 import type { RolesRepository } from '../roles.js';
 import { createJobGuards } from './guards.js';
 
@@ -27,7 +27,6 @@ const jobSchema = {
     'publishedAt',
     'discoveredAt',
     'lastSeenAt',
-    'status',
   ],
   properties: {
     id: { type: 'string' },
@@ -45,18 +44,34 @@ const jobSchema = {
   },
 } as const;
 
+function toPublicJob(job: StoredJob) {
+  return {
+    id: job.id,
+    title: job.title,
+    company: job.company,
+    location: job.location,
+    workplaceType: job.workplaceType,
+    technology: job.technology,
+    url: job.url,
+    source: job.source,
+    publishedAt: job.publishedAt,
+    discoveredAt: job.discoveredAt,
+    lastSeenAt: job.lastSeenAt,
+  };
+}
+
 export async function registerJobRoutes(app: FastifyInstance, options: JobRoutesOptions) {
   const guards = createJobGuards(app, options);
 
-  app.get('/auth/me', { preHandler: [guards.requireAuthenticated, guards.requireRolesConfigured] }, async (request) => {
+  app.get('/auth/me', { preHandler: [guards.requireAuthenticated, guards.requireRole] }, async (request) => {
     const userId = request.dashboardUserId!;
-    return { userId, role: await options.rolesRepository!.getRole(userId) };
+    return { userId, role: request.dashboardRole };
   });
 
   app.get(
     '/jobs',
     {
-      preHandler: guards.requireAuthenticated,
+      preHandler: [guards.requireAuthenticated, guards.requireRole],
       schema: {
         querystring: {
           type: 'object',
@@ -79,20 +94,37 @@ export async function registerJobRoutes(app: FastifyInstance, options: JobRoutes
               items: { type: 'array', items: jobSchema },
             },
           },
+          403: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['statusCode', 'error', 'message'],
+            properties: {
+              statusCode: { type: 'integer' },
+              error: { type: 'string' },
+              message: { type: 'string' },
+            },
+          },
         },
       },
     },
-    async (request) => {
+    async (request, reply) => {
       const filters = request.query as JobListFilters;
+      if (filters.status && request.dashboardRole !== 'admin') {
+        return reply.code(403).send({
+          statusCode: 403,
+          error: 'Forbidden',
+          message: 'Only the dashboard administrator can filter by job status.',
+        });
+      }
       const items = await options.repository.list(filters);
-      return { items };
+      return { items: request.dashboardRole === 'admin' ? items : items.map(toPublicJob) };
     },
   );
 
   app.patch(
     '/jobs/:id/status',
     {
-      preHandler: [guards.requireAuthenticated, guards.requireAdmin],
+      preHandler: [guards.requireAuthenticated, guards.requireRole, guards.requireAdmin],
       schema: {
         params: {
           type: 'object',
@@ -128,13 +160,13 @@ export async function registerJobRoutes(app: FastifyInstance, options: JobRoutes
   app.get(
     '/jobs/summary',
     {
-      preHandler: guards.requireAuthenticated,
+      preHandler: [guards.requireAuthenticated, guards.requireRole],
       schema: {
         response: {
           200: {
             type: 'object',
             additionalProperties: false,
-            required: ['total', 'new', 'saved', 'applied', 'discarded'],
+            required: ['total'],
             properties: {
               total: { type: 'integer' },
               new: { type: 'integer' },
@@ -146,7 +178,10 @@ export async function registerJobRoutes(app: FastifyInstance, options: JobRoutes
         },
       },
     },
-    async () => options.repository.summary(),
+    async (request) => {
+      const summary = await options.repository.summary();
+      return request.dashboardRole === 'admin' ? summary : { total: summary.total };
+    },
   );
 
   app.post(
@@ -173,7 +208,7 @@ export async function registerJobRoutes(app: FastifyInstance, options: JobRoutes
                   location: { type: 'string', minLength: 1 },
                   workplaceType: { type: 'string', minLength: 1 },
                   technology: { type: 'string', minLength: 1, maxLength: 50 },
-                  url: { type: 'string', format: 'uri' },
+                  url: { type: 'string', format: 'uri', pattern: '^https?://' },
                   source: { type: 'string', minLength: 1 },
                   publishedAt: { type: 'string', format: 'date-time' },
                 },
